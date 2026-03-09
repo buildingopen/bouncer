@@ -326,15 +326,15 @@ class TestDecisionFormat:
                             }))):
                                 with pytest.raises(SystemExit) as exc_info:
                                     ga.main()
-                                assert exc_info.value.code == 0
+                                assert exc_info.value.code == 2
                                 out = capsys.readouterr().out.strip()
                                 parsed = json.loads(out)
                                 assert parsed["decision"] == "block"
                                 assert "reason" in parsed
                                 assert "7/10" in parsed["reason"]
 
-    def test_block_exit_code_is_zero(self, capsys):
-        """Even on block, exit code is 0 (JSON carries the decision)."""
+    def test_block_exit_code_is_two(self, capsys):
+        """On block, exit code is 2 (signals block to Claude Code)."""
         with mock.patch.object(ga, "GEMINI_API_KEY", "fake-key"):
             with mock.patch("os.path.exists", return_value=True):
                 with mock.patch.object(ga, "get_context", return_value=""):
@@ -345,7 +345,7 @@ class TestDecisionFormat:
                             }))):
                                 with pytest.raises(SystemExit) as exc_info:
                                     ga.main()
-                                assert exc_info.value.code == 0
+                                assert exc_info.value.code == 2
 
 
 # --- Trivial skip ---
