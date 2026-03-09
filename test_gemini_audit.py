@@ -312,19 +312,28 @@ class TestTrivialSkip:
                     assert exc_info.value.code == 0
 
 
-# --- stop_hook_active skip ---
+# --- stop_hook_active re-audit ---
 
 class TestStopHookActive:
-    def test_skips_when_active(self):
+    def test_reaudits_when_active(self, capsys):
+        """stop_hook_active=true does NOT skip; it re-audits via Gemini."""
         with mock.patch.object(ga, "GEMINI_API_KEY", "fake-key"):
             with mock.patch("os.path.exists", return_value=True):
-                with mock.patch("sys.stdin", mock.Mock(read=lambda: json.dumps({
-                    "last_assistant_message": "x" * 100,
-                    "stop_hook_active": True,
-                }))):
-                    with pytest.raises(SystemExit) as exc_info:
-                        ga.main()
-                    assert exc_info.value.code == 0
+                with mock.patch.object(ga, "get_context", return_value=""):
+                    with mock.patch.object(ga, "get_git_diff", return_value=("", "")):
+                        with mock.patch.object(ga, "audit_with_gemini", return_value="SCORE: 10/10\nISSUES:\n- none\nVERDICT: PASS") as mock_audit:
+                            with mock.patch("sys.stdin", mock.Mock(read=lambda: json.dumps({
+                                "last_assistant_message": "x" * 100,
+                                "stop_hook_active": True,
+                                "session_id": "test-reaudit",
+                            }))):
+                                with pytest.raises(SystemExit) as exc_info:
+                                    ga.main()
+                                assert exc_info.value.code == 0
+                                mock_audit.assert_called_once()
+                                out = capsys.readouterr().out.strip()
+                                parsed = json.loads(out)
+                                assert parsed["decision"] == "approve"
 
 
 # --- Log rotation ---
