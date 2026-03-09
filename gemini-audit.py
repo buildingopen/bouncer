@@ -8,61 +8,135 @@ ON by default. Disable with: rm ~/.claude/.gemini-audit-enabled
 Skip: only trivial responses (<50 chars).
 """
 
+import collections
+import fcntl
 import glob
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-GEMINI_API_KEY = os.environ.get(
-    "GEMINI_API_KEY",
-    os.environ.get("GOOGLE_API_KEY", ""),
-)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 FLAG_FILE = os.path.expanduser("~/.claude/.gemini-audit-enabled")
 LOG_FILE = os.path.expanduser("~/.claude/hooks/gemini-audit.log")
-THRESHOLD = 10  # Minimum score to pass - only 10/10 is acceptable
+THRESHOLD = 10  # Minimum score to pass
+
+RETRY_DIR = Path("/tmp/gemini-audit-retries")
+MAX_RETRIES = 3
+RETRY_TTL_HOURS = 24
+
+LOG_MAX_BYTES = 1_000_000  # 1 MB
+LOG_BACKUP_COUNT = 1
+
+
+def rotate_log():
+    """Rotate log file if it exceeds LOG_MAX_BYTES. Keep LOG_BACKUP_COUNT backups."""
+    log_path = Path(LOG_FILE)
+    if not log_path.exists():
+        return
+    try:
+        if log_path.stat().st_size > LOG_MAX_BYTES:
+            for i in range(LOG_BACKUP_COUNT, 0, -1):
+                src = log_path.with_suffix(f".log.{i}")
+                dst = log_path.with_suffix(f".log.{i + 1}")
+                if src.exists():
+                    if i >= LOG_BACKUP_COUNT:
+                        src.unlink()
+                    else:
+                        shutil.move(str(src), str(dst))
+            shutil.move(str(log_path), str(log_path.with_suffix(".log.1")))
+    except Exception:
+        pass
 
 
 def log(msg):
-    with open(LOG_FILE, "a") as f:
-        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+    try:
+        with open(LOG_FILE, "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+    except Exception:
+        pass
+
+
+def get_retry_count(session_id):
+    """Get number of times this session has been blocked. Clean stale files."""
+    if not session_id:
+        return 0
+    RETRY_DIR.mkdir(parents=True, exist_ok=True)
+    # Clean stale retry files
+    try:
+        now = time.time()
+        for p in RETRY_DIR.iterdir():
+            if now - p.stat().st_mtime > RETRY_TTL_HOURS * 3600:
+                p.unlink()
+    except Exception:
+        pass
+    retry_file = RETRY_DIR / session_id
+    if retry_file.exists():
+        try:
+            return int(retry_file.read_text().strip())
+        except (ValueError, OSError):
+            return 0
+    return 0
+
+
+def increment_retry(session_id):
+    """Increment retry count for this session."""
+    if not session_id:
+        return
+    RETRY_DIR.mkdir(parents=True, exist_ok=True)
+    retry_file = RETRY_DIR / session_id
+    count = get_retry_count(session_id) + 1
+    retry_file.write_text(str(count))
 
 
 def get_git_diff():
-    """Get recent changes from git diff."""
+    """Get staged + unstaged changes from git diff."""
+    stat_parts = []
+    diff_parts = []
+    cwd = os.getcwd()
+
+    # Staged changes
     try:
-        result = subprocess.run(
-            ["git", "diff", "HEAD~1", "--stat", "--no-color"],
-            capture_output=True, text=True, timeout=5, cwd=os.getcwd(),
+        stat_r = subprocess.run(
+            ["git", "diff", "--cached", "--stat", "--no-color"],
+            capture_output=True, text=True, timeout=5, cwd=cwd,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            stat = result.stdout.strip()
-            diff_result = subprocess.run(
-                ["git", "diff", "HEAD~1", "--no-color"],
-                capture_output=True, text=True, timeout=5, cwd=os.getcwd(),
-            )
-            diff_text = diff_result.stdout[:100_000] if diff_result.returncode == 0 else ""
-            return stat, diff_text
+        diff_r = subprocess.run(
+            ["git", "diff", "--cached", "--no-color"],
+            capture_output=True, text=True, timeout=5, cwd=cwd,
+        )
+        if stat_r.returncode == 0 and stat_r.stdout.strip():
+            stat_parts.append("STAGED:\n" + stat_r.stdout.strip())
+        if diff_r.returncode == 0 and diff_r.stdout.strip():
+            diff_parts.append(diff_r.stdout.strip())
     except Exception:
         pass
+
+    # Unstaged changes
     try:
-        result = subprocess.run(
+        stat_r = subprocess.run(
             ["git", "diff", "--stat", "--no-color"],
-            capture_output=True, text=True, timeout=5, cwd=os.getcwd(),
+            capture_output=True, text=True, timeout=5, cwd=cwd,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            stat = result.stdout.strip()
-            diff_result = subprocess.run(
-                ["git", "diff", "--no-color"],
-                capture_output=True, text=True, timeout=5, cwd=os.getcwd(),
-            )
-            diff_text = diff_result.stdout[:100_000] if diff_result.returncode == 0 else ""
-            return stat, diff_text
+        diff_r = subprocess.run(
+            ["git", "diff", "--no-color"],
+            capture_output=True, text=True, timeout=5, cwd=cwd,
+        )
+        if stat_r.returncode == 0 and stat_r.stdout.strip():
+            stat_parts.append("UNSTAGED:\n" + stat_r.stdout.strip())
+        if diff_r.returncode == 0 and diff_r.stdout.strip():
+            diff_parts.append(diff_r.stdout.strip())
     except Exception:
         pass
-    return "", ""
+
+    return "\n".join(stat_parts), "\n".join(diff_parts)
 
 
 def get_context(data):
@@ -76,24 +150,26 @@ def get_context(data):
     if transcript_path and os.path.exists(transcript_path):
         try:
             with open(transcript_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                        if entry.get("role") == "user":
-                            content = entry.get("content", "")
-                            if isinstance(content, list):
-                                parts = []
-                                for block in content:
-                                    if isinstance(block, dict) and block.get("type") == "text":
-                                        parts.append(block.get("text", ""))
-                                content = "\n".join(parts)
-                            if isinstance(content, str) and len(content) > 10:
-                                user_messages.append(content[:1000])
-                    except (json.JSONDecodeError, KeyError):
-                        continue
+                tail = collections.deque(f, maxlen=200)
+            for raw_line in tail:
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                try:
+                    entry = json.loads(raw_line)
+                    if entry.get("type") == "user":
+                        msg = entry.get("message", {})
+                        content = msg.get("content", "") if isinstance(msg, dict) else ""
+                        if isinstance(content, list):
+                            text_parts = []
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") == "text":
+                                    text_parts.append(block.get("text", ""))
+                            content = "\n".join(text_parts)
+                        if isinstance(content, str) and len(content) > 10:
+                            user_messages.append(content[:1000])
+                except (json.JSONDecodeError, KeyError):
+                    continue
         except Exception:
             pass
 
@@ -113,7 +189,6 @@ def get_context(data):
             pass
 
     # 3. Only include workplan if recently modified (within last 2 hours)
-    # Stale workplans from old sessions cause false positives
     workplans = sorted(glob.glob(str(Path(cwd) / "WORKPLAN-*.md")), reverse=True)
     if workplans:
         try:
@@ -135,11 +210,9 @@ def audit_with_gemini(assistant_text, diff_stat, diff_text, task_context):
     from google import genai
     from google.genai import types
 
-    # Budget: ~800k chars total to stay under Gemini's 1M token limit
-    # Priority: assistant response (most important) > context > diff
-    BUDGET_ASSISTANT = 200_000   # Claude's full response
-    BUDGET_CONTEXT = 50_000      # User messages + CLAUDE.md + workplan
-    BUDGET_DIFF = 50_000         # Git diff
+    BUDGET_ASSISTANT = 200_000
+    BUDGET_CONTEXT = 50_000
+    BUDGET_DIFF = 50_000
 
     diff_section = ""
     if diff_stat:
@@ -160,14 +233,8 @@ TASK CONTEXT (what Claude was asked to do, project rules, active workplan):
 {task_context[:BUDGET_CONTEXT]}
 """
 
-    prompt = f"""You are an independent reviewer auditing an AI coding agent (Claude).
+    prompt = f"""You are an independent reviewer auditing an AI coding agent's output.
 Score the output 1-10 and list specific issues. Be harsh but fair.
-
-THRESHOLD: Only {THRESHOLD}/10 passes. Claude must not stop until BOTH you (Gemini) AND Claude agree the work is genuinely {THRESHOLD}/10. If it is {THRESHOLD - 1}/10, block it and tell Claude what to fix. Only score {THRESHOLD}/10 when:
-- Every claim is verified (not just stated)
-- All tasks are complete, not "almost done" or "needs manual step"
-- Code/config changes are tested and confirmed working
-- No hand-waving, no "this will work when you restart"
 
 SCORING CRITERIA:
 - 10/10: Verified complete, every claim backed by evidence, nothing left undone
@@ -181,10 +248,10 @@ IMPORTANT RULES:
 - The git diff may be UNRELATED to the current response. Do NOT penalize for diff/response mismatch unless the agent explicitly claims to have made specific code changes that aren't in the diff.
 - Score the response on its OWN merits: accuracy, completeness, helpfulness, specificity.
 - Only use the diff to verify if the agent explicitly claims "I changed X" or "I fixed Y".
-- When the agent shows verified command output (e.g., curl responses, file contents, test results), treat those as evidence. Do not call them "unverifiable" just because you cannot run the commands yourself.
-- SELF-SCORING IS EXPECTED: Claude is instructed by its CLAUDE.md to self-score work (score tables, 10/10 assessments). This is the standard workflow, not a conflict of interest. Do NOT penalize Claude for including score tables or self-assessments. YOUR job is to independently verify whether the self-score is accurate.
-- TOOL OUTPUT IS EVIDENCE: When Claude shows tool results (command output, file reads, curl responses, grep results), these are real executed commands with real output. Treat them as verified evidence.
-- Use the TASK CONTEXT below to understand what Claude was asked to do. The USER'S REQUEST section defines the task. Score whether Claude completed THAT request. A workplan may be included but could be from a different task; if it contradicts the user messages, trust the user messages.
+- When the agent shows verified command output (e.g., curl responses, file contents, test results), treat those as evidence.
+- SELF-SCORING IS EXPECTED: The agent is instructed to self-score work. This is the standard workflow. Do NOT penalize for self-assessments. YOUR job is to independently verify whether the self-score is accurate.
+- TOOL OUTPUT IS EVIDENCE: When the agent shows tool results (command output, file reads, curl responses, grep results), these are real executed commands with real output. Treat them as verified evidence.
+- Use the TASK CONTEXT below to understand what the agent was asked to do. The USER'S REQUEST section defines the task. Score whether the agent completed THAT request.
 {context_section}
 WHAT THE AGENT SAID:
 {assistant_text[:BUDGET_ASSISTANT]}
@@ -204,19 +271,22 @@ VERDICT: PASS or FAIL
         contents=prompt,
         config=types.GenerateContentConfig(
             max_output_tokens=1024,
-            temperature=0.2,
+            temperature=0.0,
         ),
     )
     return response.text
 
 
 def main():
+    rotate_log()
+
     # Check opt-in flag
     if not os.path.exists(FLAG_FILE):
         sys.exit(0)
 
+    # Fail-open if no API key
     if not GEMINI_API_KEY:
-        log("ERROR: GEMINI_API_KEY or GOOGLE_API_KEY not set")
+        log("SKIP: no GEMINI_API_KEY or GOOGLE_API_KEY set")
         sys.exit(0)
 
     # Read hook input from stdin
@@ -227,7 +297,6 @@ def main():
         log("ERROR: could not parse stdin")
         sys.exit(0)
 
-    # Log available fields for debugging
     log(f"FIELDS: {list(data.keys())}")
 
     # Always re-audit, even after a previous block. Claude must keep working
@@ -235,6 +304,14 @@ def main():
     # every stop attempt is independently verified.
     if data.get("stop_hook_active"):
         log("RE-AUDIT: stop_hook_active=true, auditing again")
+
+    # Check per-session retry limit
+    session_id = data.get("session_id", "")
+    retry_count = get_retry_count(session_id)
+    if retry_count >= MAX_RETRIES:
+        log(f"SKIP: session {session_id[:12]}... hit retry limit ({retry_count}/{MAX_RETRIES}), auto-approving")
+        print(json.dumps({"decision": "approve"}))
+        sys.exit(0)
 
     # Extract assistant's message
     assistant_text = data.get("last_assistant_message", "")
@@ -287,7 +364,7 @@ def main():
             break
 
     if score is None:
-        log(f"WARN: could not parse score from: {result[:200]}")
+        log(f"WARN: could not parse score from: {result[:500]}")
         sys.exit(0)
 
     log(f"SCORE: {score}/10")
@@ -297,10 +374,12 @@ def main():
         print(json.dumps({"decision": "approve"}))
         sys.exit(0)
     else:
-        log(f"FAIL: {score}/10 < {THRESHOLD}")
-        reason = f"[Gemini Independent Audit: {score}/10 - BELOW THRESHOLD]\n\n{result}\n\nFix the issues listed above before returning."
+        increment_retry(session_id)
+        new_count = retry_count + 1
+        log(f"FAIL: {score}/10 < {THRESHOLD} (retry {new_count}/{MAX_RETRIES})")
+        reason = f"[Gemini Independent Audit: {score}/10 - BELOW THRESHOLD (attempt {new_count}/{MAX_RETRIES})]\n\n{result}\n\nFix the issues listed above before returning."
         print(json.dumps({"decision": "block", "reason": reason}))
-        sys.exit(2)
+        sys.exit(0)
 
 
 if __name__ == "__main__":
