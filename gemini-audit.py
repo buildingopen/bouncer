@@ -2,10 +2,9 @@
 """
 Gemini independent audit hook for Claude Code Stop events.
 Sends assistant output + user request + CLAUDE.md + workplan + git diff to Gemini.
-If score < threshold, feeds back issues to Claude to keep working.
+If score < 10/10, feeds back issues to Claude to keep working.
 
-Enable: touch ~/.claude/.gemini-audit-enabled
-Disable: rm ~/.claude/.gemini-audit-enabled
+ON by default. Disable with: rm ~/.claude/.gemini-audit-enabled
 Skip: only trivial responses (<50 chars).
 """
 
@@ -231,10 +230,11 @@ def main():
     # Log available fields for debugging
     log(f"FIELDS: {list(data.keys())}")
 
-    # Don't run if already in a stop-hook loop (prevents infinite retries)
+    # Always re-audit, even after a previous block. Claude must keep working
+    # until Gemini scores 10/10. The stop_hook_active flag is ignored so that
+    # every stop attempt is independently verified.
     if data.get("stop_hook_active"):
-        log("SKIP: stop_hook_active=true (already continuing from previous hook)")
-        sys.exit(0)
+        log("RE-AUDIT: stop_hook_active=true, auditing again")
 
     # Extract assistant's message
     assistant_text = data.get("last_assistant_message", "")
