@@ -1,6 +1,8 @@
-# Gemini Audit Hook for Claude Code
+# Bouncer
 
-Independent quality gate that uses Gemini to review Claude Code's output before it stops. If the score is below threshold, Claude is blocked from stopping and told what to fix.
+Gemini stands at the door. Independent quality gate that audits Claude Code's output before it can stop. Score below threshold? Claude keeps working.
+
+[![Tests](https://github.com/buildingopen/bouncer/actions/workflows/test.yml/badge.svg)](https://github.com/buildingopen/bouncer/actions/workflows/test.yml)
 
 ```
 User prompt → Claude Code → [Stop Hook] → Gemini 2.5 Flash
