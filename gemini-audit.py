@@ -322,6 +322,24 @@ def main():
         log(f"SKIP: trivial response ({len(str(assistant_text))} chars)")
         sys.exit(0)
 
+    # Skip system/error messages that Claude can't fix (prevents infinite loops)
+    SKIP_PATTERNS = [
+        "You're out of extra usage",
+        "You've hit the rate limit",
+        "rate limit",
+        "context window full",
+        "connection error",
+        "network error",
+        "API error",
+        "internal server error",
+        "service unavailable",
+    ]
+    assistant_lower = str(assistant_text).lower()
+    for pattern in SKIP_PATTERNS:
+        if pattern.lower() in assistant_lower:
+            log(f"SKIP: system/error message detected ('{pattern}')")
+            sys.exit(0)
+
     # Gather context: user request, CLAUDE.md, workplan
     task_context = get_context(data)
     log(f"CONTEXT: {len(task_context)} chars")

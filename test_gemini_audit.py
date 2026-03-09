@@ -299,6 +299,47 @@ class TestTrivialSkip:
                     assert exc_info.value.code == 0
 
 
+# --- System/error message skip ---
+
+class TestSystemMessageSkip:
+    def test_skips_rate_limit_message(self):
+        """Rate limit messages auto-approve to prevent infinite loops."""
+        with mock.patch.object(ga, "GEMINI_API_KEY", "fake-key"):
+            with mock.patch("os.path.exists", return_value=True):
+                with mock.patch("sys.stdin", mock.Mock(read=lambda: json.dumps({
+                    "last_assistant_message": "You're out of extra usage for Claude on your current plan.",
+                }))):
+                    with pytest.raises(SystemExit) as exc_info:
+                        ga.main()
+                    assert exc_info.value.code == 0
+
+    def test_skips_connection_error(self):
+        """Connection errors auto-approve."""
+        with mock.patch.object(ga, "GEMINI_API_KEY", "fake-key"):
+            with mock.patch("os.path.exists", return_value=True):
+                with mock.patch("sys.stdin", mock.Mock(read=lambda: json.dumps({
+                    "last_assistant_message": "A connection error occurred while processing your request.",
+                }))):
+                    with pytest.raises(SystemExit) as exc_info:
+                        ga.main()
+                    assert exc_info.value.code == 0
+
+    def test_does_not_skip_normal_response(self):
+        """Normal responses are NOT skipped by the pattern check."""
+        with mock.patch.object(ga, "GEMINI_API_KEY", "fake-key"):
+            with mock.patch("os.path.exists", return_value=True):
+                with mock.patch.object(ga, "get_context", return_value=""):
+                    with mock.patch.object(ga, "get_git_diff", return_value=("", "")):
+                        with mock.patch.object(ga, "audit_with_gemini", return_value="SCORE: 10/10\nISSUES:\n- none\nVERDICT: PASS"):
+                            with mock.patch("sys.stdin", mock.Mock(read=lambda: json.dumps({
+                                "last_assistant_message": "I fixed the bug by updating the validation logic. All tests pass.",
+                            }))):
+                                with pytest.raises(SystemExit) as exc_info:
+                                    ga.main()
+                                # Should NOT have been skipped - it went through Gemini
+                                assert exc_info.value.code == 0
+
+
 # --- stop_hook_active re-audit ---
 
 class TestStopHookActive:
