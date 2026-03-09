@@ -171,6 +171,22 @@ class TestGetContext:
         finally:
             os.unlink(path)
 
+    def test_filters_hook_feedback_from_user_messages(self):
+        """Hook feedback messages are NOT included as user messages."""
+        path = self._make_transcript([
+            {"type": "user", "message": {"role": "user", "content": "Deploy the app"}, "uuid": "1"},
+            {"type": "user", "message": {"role": "user", "content": "[Gemini Independent Audit: 6/10 - BELOW THRESHOLD]\n\nSCORE: 6/10\nISSUES:\n- incomplete\n\nFix the issues listed above before returning."}, "uuid": "2"},
+            {"type": "user", "message": {"role": "user", "content": "Stop hook feedback: Fix the issues listed above before returning."}, "uuid": "3"},
+        ])
+        try:
+            data = {"transcript_path": path, "cwd": "/tmp"}
+            ctx = ga.get_context(data)
+            assert "Deploy the app" in ctx
+            assert "BELOW THRESHOLD" not in ctx
+            assert "Fix the issues" not in ctx
+        finally:
+            os.unlink(path)
+
     def test_missing_transcript(self):
         """No transcript path returns empty context (no crash)."""
         ctx = ga.get_context({"cwd": "/tmp"})

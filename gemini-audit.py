@@ -157,6 +157,11 @@ def get_context(data):
                                     text_parts.append(block.get("text", ""))
                             content = "\n".join(text_parts)
                         if isinstance(content, str) and len(content) > 10:
+                            # Skip hook feedback messages (they pollute context)
+                            if "Gemini Independent Audit:" in content or "Fix the issues listed above" in content:
+                                continue
+                            if "Stop hook" in content and "BELOW THRESHOLD" in content:
+                                continue
                             user_messages.append(content[:1000])
 
                     elif entry_type == "assistant" and isinstance(content, list):
