@@ -109,10 +109,12 @@ def get_context(data):
     cwd = data.get("cwd", os.getcwd())
     context_parts = []
 
-    # 1. Extract user messages and assistant tool activity from transcript
+    # 1. Extract user messages, tool activity, and tool results from transcript
     transcript_path = data.get("transcript_path", "")
     user_messages = []
     assistant_activity = []  # Recent tool calls and text blocks for evidence
+    # Track pending tool calls to pair with results
+    pending_tools = {}  # tool_use_id -> activity_index
     if transcript_path and os.path.exists(transcript_path):
         try:
             with open(transcript_path) as f:
@@ -129,6 +131,26 @@ def get_context(data):
 
                     if entry_type == "user":
                         if isinstance(content, list):
+                            # Check for tool_result blocks (command output evidence)
+                            has_tool_results = False
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") == "tool_result":
+                                    has_tool_results = True
+                                    result_text = block.get("content", "")
+                                    tool_id = block.get("tool_use_id", "")
+                                    is_error = block.get("is_error", False)
+                                    if result_text and len(str(result_text)) > 5:
+                                        result_str = str(result_text)[:500]
+                                        prefix = "ERROR" if is_error else "OUTPUT"
+                                        # Append result to the matching tool call if found
+                                        if tool_id in pending_tools:
+                                            idx = pending_tools[tool_id]
+                                            assistant_activity[idx] += f"\n  → {prefix}: {result_str}"
+                                        else:
+                                            assistant_activity.append(f"[{prefix}] {result_str}")
+                            if has_tool_results:
+                                continue  # Don't treat as user message
+                            # Normal user message with text blocks
                             text_parts = []
                             for block in content:
                                 if isinstance(block, dict) and block.get("type") == "text":
@@ -144,8 +166,8 @@ def get_context(data):
                             btype = block.get("type", "")
                             if btype == "tool_use":
                                 name = block.get("name", "?")
+                                tool_id = block.get("id", "")
                                 inp = block.get("input", {})
-                                # Summarize tool call (command, file path, etc.)
                                 summary = ""
                                 if "command" in inp:
                                     summary = f"$ {inp['command'][:200]}"
@@ -153,7 +175,10 @@ def get_context(data):
                                     summary = inp["file_path"]
                                 elif "pattern" in inp:
                                     summary = f"pattern={inp['pattern']}"
-                                assistant_activity.append(f"[{name}] {summary}"[:300])
+                                activity_line = f"[{name}] {summary}"[:300]
+                                assistant_activity.append(activity_line)
+                                if tool_id:
+                                    pending_tools[tool_id] = len(assistant_activity) - 1
                             elif btype == "text":
                                 text = block.get("text", "")
                                 if len(text) > 20:

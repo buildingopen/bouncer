@@ -106,13 +106,16 @@ class TestGetContext:
         path = self._make_transcript([
             {"type": "user", "message": {"role": "user", "content": "Run the tests and deploy"}, "uuid": "1"},
             {"type": "assistant", "message": {"role": "assistant", "content": [
-                {"type": "tool_use", "name": "Bash", "input": {"command": "python3 -m pytest test.py -v"}},
+                {"type": "tool_use", "id": "tool_1", "name": "Bash", "input": {"command": "python3 -m pytest test.py -v"}},
             ]}, "uuid": "2"},
+            {"type": "user", "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tool_1", "content": "21 passed, 0 failed", "is_error": False},
+            ]}, "uuid": "2b"},
             {"type": "assistant", "message": {"role": "assistant", "content": [
                 {"type": "text", "text": "All 21 tests passed. Deploying now."},
             ]}, "uuid": "3"},
             {"type": "assistant", "message": {"role": "assistant", "content": [
-                {"type": "tool_use", "name": "Bash", "input": {"command": "cp file.py /dest/file.py"}},
+                {"type": "tool_use", "id": "tool_2", "name": "Bash", "input": {"command": "cp file.py /dest/file.py"}},
             ]}, "uuid": "4"},
         ])
         try:
@@ -122,6 +125,49 @@ class TestGetContext:
             assert "python3 -m pytest" in ctx
             assert "cp file.py" in ctx
             assert "All 21 tests passed" in ctx
+            # Tool result should be paired with tool call
+            assert "21 passed, 0 failed" in ctx
+        finally:
+            os.unlink(path)
+
+    def test_extracts_tool_results_as_evidence(self):
+        """Tool results are paired with their tool calls in the activity log."""
+        path = self._make_transcript([
+            {"type": "user", "message": {"role": "user", "content": "Check the git status"}, "uuid": "1"},
+            {"type": "assistant", "message": {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "tool_abc", "name": "Bash", "input": {"command": "git rev-parse HEAD"}},
+            ]}, "uuid": "2"},
+            {"type": "user", "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tool_abc", "content": "ac3db3cb76c76504f27b9fd92548a87d8bed3b36", "is_error": False},
+            ]}, "uuid": "3"},
+        ])
+        try:
+            data = {"transcript_path": path, "cwd": "/tmp"}
+            ctx = ga.get_context(data)
+            assert "ac3db3cb76c76504" in ctx
+            assert "OUTPUT" in ctx
+        finally:
+            os.unlink(path)
+
+    def test_tool_result_not_counted_as_user_message(self):
+        """Entries with only tool_result blocks are NOT treated as user messages."""
+        path = self._make_transcript([
+            {"type": "user", "message": {"role": "user", "content": "Deploy the app please"}, "uuid": "1"},
+            {"type": "assistant", "message": {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "deploy.sh"}},
+            ]}, "uuid": "2"},
+            {"type": "user", "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "Deployed successfully", "is_error": False},
+            ]}, "uuid": "3"},
+        ])
+        try:
+            data = {"transcript_path": path, "cwd": "/tmp"}
+            ctx = ga.get_context(data)
+            assert "Deploy the app" in ctx
+            # Tool result content appears in activity, not user messages
+            assert "Deployed successfully" in ctx
+            # Should only have 1 user message
+            assert ctx.count("last 1 messages") == 1 or "last 1 message" in ctx
         finally:
             os.unlink(path)
 
