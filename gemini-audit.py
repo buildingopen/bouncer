@@ -184,10 +184,9 @@ def get_context(data):
                                 assistant_activity.append(activity_line)
                                 if tool_id:
                                     pending_tools[tool_id] = len(assistant_activity) - 1
-                            elif btype == "text":
-                                text = block.get("text", "")
-                                if len(text) > 20:
-                                    assistant_activity.append(f"[text] {text[:500]}")
+                            # Skip [text] blocks - they're old assistant responses
+                            # that create stale context. Gemini already sees the
+                            # current response via last_assistant_message.
                 except (json.JSONDecodeError, KeyError):
                     continue
         except Exception:

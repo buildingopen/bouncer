@@ -124,7 +124,8 @@ class TestGetContext:
             assert "RECENT AGENT ACTIVITY" in ctx
             assert "python3 -m pytest" in ctx
             assert "cp file.py" in ctx
-            assert "All 21 tests passed" in ctx
+            # Text blocks are excluded (they're old responses, not evidence)
+            assert "All 21 tests passed" not in ctx
             # Tool result should be paired with tool call
             assert "21 passed, 0 failed" in ctx
         finally:
