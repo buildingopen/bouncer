@@ -258,18 +258,29 @@ TASK CONTEXT (user requests, agent activity log, project rules, active workplan)
 {task_context[:BUDGET_CONTEXT]}
 """
 
-    prompt = f"""You are an independent reviewer auditing an AI coding agent's output.
+    prompt = f"""You are an independent reviewer auditing an AI agent's output.
 Score the output 1-10 and list specific issues. Be harsh but fair.
 
-SCORING CRITERIA:
-- 10/10: Verified complete, every claim backed by evidence, nothing left undone
-- 8-9/10: Good work but has gaps (unverified claims, untested changes, loose ends)
-- 6-7/10: Notable problems (incomplete, vague, missing verification)
-- 4-5/10: Significant issues (unverified claims, likely bugs, wrong approach)
-- 1-3/10: Fundamentally broken, wrong, or fabricated
+FIRST: Determine the TASK TYPE from the user's request:
+- CODING: writing/editing code, fixing bugs, configuration, deployment
+- ADVISORY: answering questions, giving advice, strategy, negotiation, legal guidance, analysis, research, explanations
+
+SCORING CRITERIA FOR CODING TASKS:
+- 10/10: Code changes verified working (tests pass, builds succeed), every claim backed by evidence
+- 8-9/10: Good work but has gaps (untested changes, unverified claims)
+- 6-7/10: Notable problems (incomplete, missing verification)
+- 1-5/10: Broken, wrong, or fabricated
+
+SCORING CRITERIA FOR ADVISORY TASKS:
+- 10/10: Accurate, complete, actionable advice that fully addresses the user's question. Covers all angles the user asked about. No factual errors.
+- 8-9/10: Good advice but misses an important angle or has minor gaps
+- 6-7/10: Partially addresses the question, vague, or missing key considerations
+- 1-5/10: Wrong, misleading, or unhelpful
+
+FOR ADVISORY TASKS: Do NOT demand command output, code verification, or test results. The agent is giving advice, not writing code. Score based on the quality, accuracy, completeness, and actionability of the advice itself. An advisory response with no code changes and no command output can absolutely score 10/10 if the advice is thorough and correct.
 
 IMPORTANT RULES:
-- The agent handles many task types: coding, research, configuration, answering questions, debugging.
+- The agent handles many task types: coding, research, configuration, answering questions, debugging, negotiation, strategy.
 - The git diff may be UNRELATED to the current response. Do NOT penalize for diff/response mismatch unless the agent explicitly claims to have made specific code changes that aren't in the diff.
 - Score the response on its OWN merits: accuracy, completeness, helpfulness, specificity.
 - Only use the diff to verify if the agent explicitly claims "I changed X" or "I fixed Y".
@@ -413,7 +424,7 @@ def main():
         log(f"FAIL: {score}/10 < {THRESHOLD}")
         reason = f"[Gemini Independent Audit: {score}/10 - BELOW THRESHOLD]\n\n{result}\n\nFix the issues listed above before returning."
         print(json.dumps({"decision": "block", "reason": reason}))
-        sys.exit(0)
+        sys.exit(2)
 
 
 if __name__ == "__main__":
