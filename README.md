@@ -2,19 +2,35 @@
 
 Independent quality gate that uses Gemini to review Claude Code's output before it stops. If the score is below threshold, Claude is blocked from stopping and told what to fix.
 
+```
+User prompt → Claude Code → [Stop Hook] → Gemini 2.5 Flash
+                                              ↓
+                                         Score 1-10
+                                              ↓
+                                    ┌─────────┴─────────┐
+                                    │                    │
+                               Score = 10           Score < 10
+                                    │                    │
+                              ✓ Approve              ✗ Block
+                           (Claude stops)      (Claude keeps working
+                                                with Gemini's feedback)
+```
+
 ## How it works
 
 1. Claude Code triggers the Stop hook when it's about to return a response
-2. The hook sends Claude's response + context (user messages, CLAUDE.md, workplan, git diff) to Gemini
-3. Gemini scores the output 1-10
-4. If score < threshold (default: 10/10), Claude is blocked and given Gemini's feedback to fix
+2. The hook extracts context: user messages from transcript, tool call results, git diff, CLAUDE.md, workplan
+3. Everything is sent to Gemini 2.5 Flash for independent scoring (1-10)
+4. If score < threshold (default: 10/10), Claude is blocked and given Gemini's feedback
 5. If score >= threshold, Claude is allowed to stop
+6. On re-audit (`stop_hook_active=true`), the hook audits again rather than skipping
 
 ## Security note
 
 This hook sends the following data to the Google Gemini API:
 - Claude's assistant response (up to 200k chars)
 - User messages from the conversation transcript (last 3, up to 50k chars total)
+- Tool call activity and results from the transcript (evidence of work done)
 - Project CLAUDE.md and active workplan
 - Git diff of staged and unstaged changes (up to 50k chars)
 
@@ -48,7 +64,7 @@ chmod +x ~/.claude/hooks/gemini-audit.sh ~/.claude/hooks/gemini-audit.py
 export GEMINI_API_KEY="your-gemini-api-key"
 ```
 
-Add this to your shell profile (`.bashrc`, `.zshrc`). If no key is set, the hook fails open (exits 0, does not block).
+Add this to your shell profile (`.bashrc`, `.zshrc`). The shell wrapper sources your profile automatically. If no key is set, the hook fails open (exits 0, does not block).
 
 ### 4. Register the hook
 
@@ -98,9 +114,10 @@ Edit `gemini-audit.py` to customize:
 
 ## Context gathered
 
-The hook automatically gathers:
+The hook automatically extracts from the conversation transcript:
 
-- **User messages**: last 3 messages from the conversation transcript (defines the task)
+- **User messages**: last 3 messages (defines the task). Hook feedback messages are filtered out to prevent stale context loops.
+- **Tool calls and results**: Bash commands, file reads, grep patterns, and their output. Paired together so Gemini sees the evidence (e.g., `[Bash] $ git rev-parse HEAD → OUTPUT: ac3db3c...`).
 - **CLAUDE.md**: project-level instructions from the working directory
 - **Workplan**: most recent `WORKPLAN-*.md` if modified within the last 2 hours
 - **Git diff**: staged (`--cached`) and unstaged changes
@@ -118,12 +135,14 @@ The prompt uses neutral scoring criteria without anchoring Gemini toward any par
 
 ## Behavior
 
-- Skips trivial responses (< 50 chars)
-- Skips when `stop_hook_active` is true (prevents infinite retry loops)
-- Fails open on API errors or missing API key
+- **Re-audits on retry**: when `stop_hook_active=true`, the hook audits again (does not skip)
+- **Skips trivial responses**: responses under 50 chars are auto-approved
+- **Skips system errors**: rate limit messages, connection errors, and similar system messages are auto-approved to prevent infinite loops
+- **Filters hook feedback**: the hook's own block messages are excluded from the transcript context sent to Gemini
+- **Fails open**: API errors or missing API key result in auto-approve (exit 0)
 - **Log rotation**: rotates at 1 MB, keeps 1 backup
 - **File locking**: uses `fcntl.flock` on log writes to prevent interleaved entries from concurrent invocations
-- Logs to `~/.claude/hooks/gemini-audit.log`
+- **Logs**: `~/.claude/hooks/gemini-audit.log`
 
 ## Running tests
 
