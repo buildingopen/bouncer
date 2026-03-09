@@ -92,7 +92,6 @@ rm ~/.claude/.gemini-audit-enabled
 Edit `gemini-audit.py` to customize:
 
 - `THRESHOLD` (default: 10) - minimum score to pass. Set to 8 for a less strict gate.
-- `MAX_RETRIES` (default: 3) - after this many blocks in one session, auto-approve to prevent infinite loops.
 - `BUDGET_ASSISTANT` (default: 200,000) - max chars of Claude's response to send
 - `BUDGET_CONTEXT` (default: 50,000) - max chars of context (user messages, CLAUDE.md, workplan)
 - `BUDGET_DIFF` (default: 50,000) - max chars of git diff
@@ -121,12 +120,10 @@ The prompt uses neutral scoring criteria without anchoring Gemini toward any par
 
 - Skips trivial responses (< 50 chars)
 - Skips when `stop_hook_active` is true (prevents infinite retry loops)
-- **Per-session retry limit**: after 3 blocks in a session, auto-approves (prevents stuck sessions)
 - Fails open on API errors or missing API key
 - **Log rotation**: rotates at 1 MB, keeps 1 backup
 - **File locking**: uses `fcntl.flock` on log writes to prevent interleaved entries from concurrent invocations
 - Logs to `~/.claude/hooks/gemini-audit.log`
-- Retry state tracked in `/tmp/gemini-audit-retries/` (auto-cleaned after 24h)
 
 ## Running tests
 

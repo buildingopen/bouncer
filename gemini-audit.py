@@ -24,10 +24,6 @@ FLAG_FILE = os.path.expanduser("~/.claude/.gemini-audit-enabled")
 LOG_FILE = os.path.expanduser("~/.claude/hooks/gemini-audit.log")
 THRESHOLD = 10  # Minimum score to pass
 
-RETRY_DIR = Path("/tmp/gemini-audit-retries")
-MAX_RETRIES = 3
-RETRY_TTL_HOURS = 24
-
 LOG_MAX_BYTES = 1_000_000  # 1 MB
 LOG_BACKUP_COUNT = 1
 
@@ -63,37 +59,6 @@ def log(msg):
     except Exception:
         pass
 
-
-def get_retry_count(session_id):
-    """Get number of times this session has been blocked. Clean stale files."""
-    if not session_id:
-        return 0
-    RETRY_DIR.mkdir(parents=True, exist_ok=True)
-    # Clean stale retry files
-    try:
-        now = time.time()
-        for p in RETRY_DIR.iterdir():
-            if now - p.stat().st_mtime > RETRY_TTL_HOURS * 3600:
-                p.unlink()
-    except Exception:
-        pass
-    retry_file = RETRY_DIR / session_id
-    if retry_file.exists():
-        try:
-            return int(retry_file.read_text().strip())
-        except (ValueError, OSError):
-            return 0
-    return 0
-
-
-def increment_retry(session_id):
-    """Increment retry count for this session."""
-    if not session_id:
-        return
-    RETRY_DIR.mkdir(parents=True, exist_ok=True)
-    retry_file = RETRY_DIR / session_id
-    count = get_retry_count(session_id) + 1
-    retry_file.write_text(str(count))
 
 
 def get_git_diff():
@@ -305,14 +270,6 @@ def main():
     if data.get("stop_hook_active"):
         log("RE-AUDIT: stop_hook_active=true, auditing again")
 
-    # Check per-session retry limit
-    session_id = data.get("session_id", "")
-    retry_count = get_retry_count(session_id)
-    if retry_count >= MAX_RETRIES:
-        log(f"SKIP: session {session_id[:12]}... hit retry limit ({retry_count}/{MAX_RETRIES}), auto-approving")
-        print(json.dumps({"decision": "approve"}))
-        sys.exit(0)
-
     # Extract assistant's message
     assistant_text = data.get("last_assistant_message", "")
     if not assistant_text:
@@ -374,10 +331,8 @@ def main():
         print(json.dumps({"decision": "approve"}))
         sys.exit(0)
     else:
-        increment_retry(session_id)
-        new_count = retry_count + 1
-        log(f"FAIL: {score}/10 < {THRESHOLD} (retry {new_count}/{MAX_RETRIES})")
-        reason = f"[Gemini Independent Audit: {score}/10 - BELOW THRESHOLD (attempt {new_count}/{MAX_RETRIES})]\n\n{result}\n\nFix the issues listed above before returning."
+        log(f"FAIL: {score}/10 < {THRESHOLD}")
+        reason = f"[Gemini Independent Audit: {score}/10 - BELOW THRESHOLD]\n\n{result}\n\nFix the issues listed above before returning."
         print(json.dumps({"decision": "block", "reason": reason}))
         sys.exit(0)
 

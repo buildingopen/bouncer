@@ -191,31 +191,6 @@ class TestGetGitDiff:
         assert diff == ""
 
 
-# --- Retry limit ---
-
-class TestRetryLimit:
-    def test_starts_at_zero(self):
-        count = ga.get_retry_count("nonexistent-session-id-12345")
-        assert count == 0
-
-    def test_increments(self):
-        sid = f"test-session-{os.getpid()}"
-        retry_file = ga.RETRY_DIR / sid
-        try:
-            ga.increment_retry(sid)
-            assert ga.get_retry_count(sid) == 1
-            ga.increment_retry(sid)
-            assert ga.get_retry_count(sid) == 2
-        finally:
-            retry_file.unlink(missing_ok=True)
-
-    def test_empty_session_id_returns_zero(self):
-        assert ga.get_retry_count("") == 0
-
-    def test_empty_session_id_no_op_increment(self):
-        ga.increment_retry("")  # no crash
-
-
 # --- Fail-open behavior ---
 
 class TestFailOpen:
@@ -254,48 +229,36 @@ class TestDecisionFormat:
 
     def test_block_format(self, capsys):
         """Block outputs correct JSON with reason."""
-        retry_file = ga.RETRY_DIR / "test-block"
-        retry_file.unlink(missing_ok=True)
-        try:
-            with mock.patch.object(ga, "GEMINI_API_KEY", "fake-key"):
-                with mock.patch("os.path.exists", return_value=True):
-                    with mock.patch.object(ga, "get_context", return_value=""):
-                        with mock.patch.object(ga, "get_git_diff", return_value=("", "")):
-                            with mock.patch.object(ga, "audit_with_gemini", return_value="SCORE: 7/10\nISSUES:\n- incomplete\nVERDICT: FAIL"):
-                                with mock.patch("sys.stdin", mock.Mock(read=lambda: json.dumps({
-                                    "last_assistant_message": "x" * 100,
-                                    "session_id": "test-block",
-                                }))):
-                                    with pytest.raises(SystemExit) as exc_info:
-                                        ga.main()
-                                    assert exc_info.value.code == 0
-                                    out = capsys.readouterr().out.strip()
-                                    parsed = json.loads(out)
-                                    assert parsed["decision"] == "block"
-                                    assert "reason" in parsed
-                                    assert "7/10" in parsed["reason"]
-        finally:
-            retry_file.unlink(missing_ok=True)
+        with mock.patch.object(ga, "GEMINI_API_KEY", "fake-key"):
+            with mock.patch("os.path.exists", return_value=True):
+                with mock.patch.object(ga, "get_context", return_value=""):
+                    with mock.patch.object(ga, "get_git_diff", return_value=("", "")):
+                        with mock.patch.object(ga, "audit_with_gemini", return_value="SCORE: 7/10\nISSUES:\n- incomplete\nVERDICT: FAIL"):
+                            with mock.patch("sys.stdin", mock.Mock(read=lambda: json.dumps({
+                                "last_assistant_message": "x" * 100,
+                            }))):
+                                with pytest.raises(SystemExit) as exc_info:
+                                    ga.main()
+                                assert exc_info.value.code == 0
+                                out = capsys.readouterr().out.strip()
+                                parsed = json.loads(out)
+                                assert parsed["decision"] == "block"
+                                assert "reason" in parsed
+                                assert "7/10" in parsed["reason"]
 
     def test_block_exit_code_is_zero(self, capsys):
         """Even on block, exit code is 0 (JSON carries the decision)."""
-        retry_file = ga.RETRY_DIR / "test-exit-0"
-        retry_file.unlink(missing_ok=True)
-        try:
-            with mock.patch.object(ga, "GEMINI_API_KEY", "fake-key"):
-                with mock.patch("os.path.exists", return_value=True):
-                    with mock.patch.object(ga, "get_context", return_value=""):
-                        with mock.patch.object(ga, "get_git_diff", return_value=("", "")):
-                            with mock.patch.object(ga, "audit_with_gemini", return_value="SCORE: 5/10\nISSUES:\n- bad\nVERDICT: FAIL"):
-                                with mock.patch("sys.stdin", mock.Mock(read=lambda: json.dumps({
-                                    "last_assistant_message": "x" * 100,
-                                    "session_id": "test-exit-0",
-                                }))):
-                                    with pytest.raises(SystemExit) as exc_info:
-                                        ga.main()
-                                    assert exc_info.value.code == 0
-        finally:
-            retry_file.unlink(missing_ok=True)
+        with mock.patch.object(ga, "GEMINI_API_KEY", "fake-key"):
+            with mock.patch("os.path.exists", return_value=True):
+                with mock.patch.object(ga, "get_context", return_value=""):
+                    with mock.patch.object(ga, "get_git_diff", return_value=("", "")):
+                        with mock.patch.object(ga, "audit_with_gemini", return_value="SCORE: 5/10\nISSUES:\n- bad\nVERDICT: FAIL"):
+                            with mock.patch("sys.stdin", mock.Mock(read=lambda: json.dumps({
+                                "last_assistant_message": "x" * 100,
+                            }))):
+                                with pytest.raises(SystemExit) as exc_info:
+                                    ga.main()
+                                assert exc_info.value.code == 0
 
 
 # --- Trivial skip ---
