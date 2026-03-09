@@ -101,6 +101,30 @@ class TestGetContext:
         finally:
             os.unlink(path)
 
+    def test_extracts_assistant_tool_activity(self):
+        """Assistant tool_use blocks are extracted as activity evidence."""
+        path = self._make_transcript([
+            {"type": "user", "message": {"role": "user", "content": "Run the tests and deploy"}, "uuid": "1"},
+            {"type": "assistant", "message": {"role": "assistant", "content": [
+                {"type": "tool_use", "name": "Bash", "input": {"command": "python3 -m pytest test.py -v"}},
+            ]}, "uuid": "2"},
+            {"type": "assistant", "message": {"role": "assistant", "content": [
+                {"type": "text", "text": "All 21 tests passed. Deploying now."},
+            ]}, "uuid": "3"},
+            {"type": "assistant", "message": {"role": "assistant", "content": [
+                {"type": "tool_use", "name": "Bash", "input": {"command": "cp file.py /dest/file.py"}},
+            ]}, "uuid": "4"},
+        ])
+        try:
+            data = {"transcript_path": path, "cwd": "/tmp"}
+            ctx = ga.get_context(data)
+            assert "RECENT AGENT ACTIVITY" in ctx
+            assert "python3 -m pytest" in ctx
+            assert "cp file.py" in ctx
+            assert "All 21 tests passed" in ctx
+        finally:
+            os.unlink(path)
+
     def test_missing_transcript(self):
         """No transcript path returns empty context (no crash)."""
         ctx = ga.get_context({"cwd": "/tmp"})

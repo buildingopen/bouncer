@@ -109,9 +109,10 @@ def get_context(data):
     cwd = data.get("cwd", os.getcwd())
     context_parts = []
 
-    # 1. Extract user messages from transcript FIRST (these define the task)
+    # 1. Extract user messages and assistant tool activity from transcript
     transcript_path = data.get("transcript_path", "")
     user_messages = []
+    assistant_activity = []  # Recent tool calls and text blocks for evidence
     if transcript_path and os.path.exists(transcript_path):
         try:
             with open(transcript_path) as f:
@@ -122,9 +123,11 @@ def get_context(data):
                     continue
                 try:
                     entry = json.loads(raw_line)
-                    if entry.get("type") == "user":
-                        msg = entry.get("message", {})
-                        content = msg.get("content", "") if isinstance(msg, dict) else ""
+                    entry_type = entry.get("type", "")
+                    msg = entry.get("message", {}) if isinstance(entry.get("message"), dict) else {}
+                    content = msg.get("content", "")
+
+                    if entry_type == "user":
                         if isinstance(content, list):
                             text_parts = []
                             for block in content:
@@ -133,6 +136,28 @@ def get_context(data):
                             content = "\n".join(text_parts)
                         if isinstance(content, str) and len(content) > 10:
                             user_messages.append(content[:1000])
+
+                    elif entry_type == "assistant" and isinstance(content, list):
+                        for block in content:
+                            if not isinstance(block, dict):
+                                continue
+                            btype = block.get("type", "")
+                            if btype == "tool_use":
+                                name = block.get("name", "?")
+                                inp = block.get("input", {})
+                                # Summarize tool call (command, file path, etc.)
+                                summary = ""
+                                if "command" in inp:
+                                    summary = f"$ {inp['command'][:200]}"
+                                elif "file_path" in inp:
+                                    summary = inp["file_path"]
+                                elif "pattern" in inp:
+                                    summary = f"pattern={inp['pattern']}"
+                                assistant_activity.append(f"[{name}] {summary}"[:300])
+                            elif btype == "text":
+                                text = block.get("text", "")
+                                if len(text) > 20:
+                                    assistant_activity.append(f"[text] {text[:500]}")
                 except (json.JSONDecodeError, KeyError):
                     continue
         except Exception:
@@ -143,6 +168,12 @@ def get_context(data):
         recent = user_messages[-3:]
         msgs = "\n---\n".join(recent)
         context_parts.append(f"USER'S REQUEST (last {len(recent)} messages - THIS defines the task):\n{msgs}")
+
+    # Recent assistant activity shows what tools were called (evidence of work done)
+    if assistant_activity:
+        recent_activity = assistant_activity[-30:]  # Last 30 actions
+        activity_text = "\n".join(recent_activity)
+        context_parts.append(f"RECENT AGENT ACTIVITY (tools called, commands run - this is evidence of work done):\n{activity_text}")
 
     # 2. Read CLAUDE.md from project root (quality standards, not task definition)
     claude_md = Path(cwd) / "CLAUDE.md"
@@ -194,7 +225,7 @@ CODE CHANGES (diff):
     context_section = ""
     if task_context:
         context_section = f"""
-TASK CONTEXT (what Claude was asked to do, project rules, active workplan):
+TASK CONTEXT (user requests, agent activity log, project rules, active workplan):
 {task_context[:BUDGET_CONTEXT]}
 """
 
@@ -216,6 +247,7 @@ IMPORTANT RULES:
 - When the agent shows verified command output (e.g., curl responses, file contents, test results), treat those as evidence.
 - SELF-SCORING IS EXPECTED: The agent is instructed to self-score work. This is the standard workflow. Do NOT penalize for self-assessments. YOUR job is to independently verify whether the self-score is accurate.
 - TOOL OUTPUT IS EVIDENCE: When the agent shows tool results (command output, file reads, curl responses, grep results), these are real executed commands with real output. Treat them as verified evidence.
+- AGENT ACTIVITY LOG: The RECENT AGENT ACTIVITY section in the context shows actual tool calls and commands the agent executed during this session. This is objective evidence of work done, not claims by the agent. Use it to verify the agent's claims.
 - Use the TASK CONTEXT below to understand what the agent was asked to do. The USER'S REQUEST section defines the task. Score whether the agent completed THAT request.
 {context_section}
 WHAT THE AGENT SAID:
