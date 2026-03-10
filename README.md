@@ -146,11 +146,47 @@ The prompt uses neutral scoring criteria without anchoring Gemini toward any par
 - **File locking**: uses `fcntl.flock` on log writes to prevent interleaved entries from concurrent invocations
 - **Logs**: `~/.claude/hooks/gemini-audit.log`
 
+## Skill variant (on-demand audit)
+
+The skill lets you run a Bouncer audit on demand via `/bouncer` in Claude Code, without the automatic Stop hook installed. Use it mid-task, before committing, or as a one-off quality check.
+
+### Install the skill
+
+```bash
+mkdir -p ~/.claude/skills/bouncer/scripts
+cp skill/SKILL.md ~/.claude/skills/bouncer/SKILL.md
+cp skill/scripts/bouncer-check.py ~/.claude/skills/bouncer/scripts/bouncer-check.py
+chmod +x ~/.claude/skills/bouncer/scripts/bouncer-check.py
+```
+
+### Usage
+
+In any Claude Code session:
+
+```
+/bouncer
+```
+
+Or say "audit my work", "check my changes", "score this", "quality check".
+
+Claude will gather the git diff, summarize what it did, and pipe everything to Gemini for scoring. You get the same 1-10 score and issue list as the hook, but on your terms.
+
+### Differences from the hook
+
+| Hook (`gemini-audit.py`) | Skill (`bouncer-check.py`) |
+|--------------------------|---------------------------|
+| Runs automatically on every stop | Runs when you ask for it |
+| Outputs `{"decision": "block/approve"}` | Prints human-readable score + issues |
+| Parses transcript for context | Receives context from Claude via stdin |
+| Log rotation, file locking | No logging (stdout only) |
+| Skip patterns, trivial check | No skipping (you asked for it) |
+| `sys.exit(2)` on block | `sys.exit(0)` always |
+
 ## Running tests
 
 ```bash
 pip install pytest
-python3 -m pytest test_gemini_audit.py -v
+python3 -m pytest test_gemini_audit.py test_bouncer_check.py -v
 ```
 
 ## Requirements

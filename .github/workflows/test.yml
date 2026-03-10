@@ -13,4 +13,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt pytest
-      - run: python -m pytest test_gemini_audit.py -v
+      - run: python -m pytest test_gemini_audit.py test_bouncer_check.py -v
