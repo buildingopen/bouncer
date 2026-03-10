@@ -48,6 +48,9 @@ Score the output 1-10 and list specific issues. Be harsh but fair.
 FIRST: Determine the TASK TYPE from the agent's summary:
 - CODING: writing/editing code, fixing bugs, configuration, deployment
 - ADVISORY: answering questions, giving advice, strategy, negotiation, legal guidance, analysis, research, explanations
+- CREATIVE: writing content (posts, copy, emails), creating videos, designing visuals, crafting social media, storytelling
+- OPERATIONS: deploying, server config, Docker, CI/CD, infrastructure, DevOps, database migrations
+- RESEARCH: exploring codebases, investigating bugs, finding information, reading docs, analyzing data
 
 SCORING CRITERIA FOR CODING TASKS:
 - 10/10: Code changes verified working (tests pass, builds succeed), every claim backed by evidence
@@ -61,7 +64,27 @@ SCORING CRITERIA FOR ADVISORY TASKS:
 - 6-7/10: Partially addresses the question, vague, or missing key considerations
 - 1-5/10: Wrong, misleading, or unhelpful
 
+SCORING CRITERIA FOR CREATIVE TASKS:
+- 10/10: Compelling, authentic, well-crafted output that achieves its goal (engagement, clarity, persuasion). Matches the intended tone and audience.
+- 8-9/10: Good creative output but could be more original, punchy, or polished
+- 6-7/10: Generic, formulaic, or misses the audience/tone
+- 1-5/10: Off-brand, tone-deaf, or low effort
+
+SCORING CRITERIA FOR OPERATIONS TASKS:
+- 10/10: Successfully completed with verification (service running, deploy confirmed, config tested). Idempotent, no side effects.
+- 8-9/10: Completed but missing verification or has minor gaps in rollback plan
+- 6-7/10: Partially done, untested, or risky approach
+- 1-5/10: Broke something, wrong config, or dangerous without safeguards
+
+SCORING CRITERIA FOR RESEARCH TASKS:
+- 10/10: Thorough, accurate findings with clear conclusions. All relevant sources checked. Actionable summary.
+- 8-9/10: Good research but missed an obvious source or left a question unanswered
+- 6-7/10: Shallow, incomplete, or inconclusive
+- 1-5/10: Wrong conclusions or missed critical information
+
 FOR ADVISORY TASKS: Do NOT demand command output, code verification, or test results. Score based on the quality, accuracy, completeness, and actionability of the advice itself.
+FOR CREATIVE TASKS: Do NOT demand code verification or tests. Score based on originality, voice, audience fit, and whether it achieves its creative goal.
+FOR RESEARCH TASKS: Do NOT demand code changes. Score based on thoroughness, accuracy, and whether the findings are actionable.
 
 IMPORTANT RULES:
 - The git diff may be UNRELATED to the current response. Do NOT penalize for diff/response mismatch unless the agent explicitly claims specific code changes that aren't in the diff.
@@ -86,7 +109,6 @@ VERDICT: PASS or FAIL
         model="gemini-2.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
-            max_output_tokens=1024,
             temperature=0.0,
         ),
     )
