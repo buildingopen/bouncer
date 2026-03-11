@@ -207,7 +207,6 @@ chmod +x ~/.claude/skills/bouncer/scripts/*.py
 | Hook (auto) | 5-15s | Transcript-based | Every response |
 | Quick (`/bouncer`) | 5-10s | Diff + summary | Spot check |
 | Deep (`/bouncer deep`) | 30-120s | Independent tool access | Before merging, final review |
-| `sys.exit(2)` on block | `sys.exit(0)` always |
 
 ## Running tests
 
