@@ -212,7 +212,7 @@ chmod +x ~/.claude/skills/bouncer/scripts/*.py
 
 ```bash
 pip install pytest
-python3 -m pytest test_gemini_audit.py test_bouncer_check.py -v
+python3 -m pytest test_gemini_audit.py test_bouncer_check.py test_bouncer_deep.py -v
 ```
 
 ## Requirements
