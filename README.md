@@ -40,19 +40,32 @@ Review Google's data handling policies before use.
 
 ## Setup
 
-### 1. Install dependency
+### Quick install (recommended)
 
 ```bash
-pip install -r requirements.txt
+curl -sL github.com/buildingopen/bouncer/raw/main/install.sh | bash
 ```
 
-Or directly:
+This installs the dependency, copies hook + skill files, registers the Stop hook in `settings.json`, and enables bouncer. You just need to set your API key:
+
+```bash
+export GEMINI_API_KEY="your-gemini-api-key"
+```
+
+Add this to your `.bashrc`/`.zshrc`. Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey). If no key is set, the hook fails open (exits 0, does not block).
+
+### Manual install
+
+<details>
+<summary>Step-by-step instructions</summary>
+
+#### 1. Install dependency
 
 ```bash
 pip install google-genai
 ```
 
-### 2. Copy files
+#### 2. Copy files
 
 ```bash
 cp gemini-audit.py ~/.claude/hooks/gemini-audit.py
@@ -60,13 +73,13 @@ cp gemini-audit.sh ~/.claude/hooks/gemini-audit.sh
 chmod +x ~/.claude/hooks/gemini-audit.sh ~/.claude/hooks/gemini-audit.py
 ```
 
-### 3. Set API key
+#### 3. Set API key
 
 ```bash
 export GEMINI_API_KEY="your-gemini-api-key"
 ```
 
-Add this to your shell profile (`.bashrc`, `.zshrc`). The shell wrapper sources your profile automatically. If no key is set, the hook fails open (exits 0, does not block).
+Add this to your shell profile (`.bashrc`, `.zshrc`).
 
 ### 4. Register the hook
 
@@ -93,11 +106,13 @@ Add to `~/.claude/settings.json`:
 
 If you already have Stop hooks, add the gemini-audit entry to the existing hooks array.
 
-### 5. Enable
+#### 5. Enable
 
 ```bash
 touch ~/.claude/.gemini-audit-enabled
 ```
+
+</details>
 
 ### Disable
 
@@ -148,38 +163,50 @@ The prompt uses neutral scoring criteria without anchoring Gemini toward any par
 
 ## Skill variant (on-demand audit)
 
-The skill lets you run a Bouncer audit on demand via `/bouncer` in Claude Code, without the automatic Stop hook installed. Use it mid-task, before committing, or as a one-off quality check.
+The skill lets you run a Bouncer audit on demand via `/bouncer` in Claude Code. Two modes:
 
-### Install the skill
-
-```bash
-mkdir -p ~/.claude/skills/bouncer/scripts
-cp skill/SKILL.md ~/.claude/skills/bouncer/SKILL.md
-cp skill/scripts/bouncer-check.py ~/.claude/skills/bouncer/scripts/bouncer-check.py
-chmod +x ~/.claude/skills/bouncer/scripts/bouncer-check.py
-```
-
-### Usage
-
-In any Claude Code session:
+### Quick audit
 
 ```
 /bouncer
 ```
 
-Or say "audit my work", "check my changes", "score this", "quality check".
+Or say "audit my work", "score this", "quality check". Gemini scores based on the diff + Claude's summary. Fast (5-10s).
 
-Claude will gather the git diff, summarize what it did, and pipe everything to Gemini for scoring. You get the same 1-10 score and issue list as the hook, but on your terms.
+### Deep audit
 
-### Differences from the hook
+```
+/bouncer deep
+```
 
-| Hook (`gemini-audit.py`) | Skill (`bouncer-check.py`) |
-|--------------------------|---------------------------|
-| Runs automatically on every stop | Runs when you ask for it |
-| Outputs `{"decision": "block/approve"}` | Prints human-readable score + issues |
-| Parses transcript for context | Receives context from Claude via stdin |
-| Log rotation, file locking | No logging (stdout only) |
-| Skip patterns, trivial check | No skipping (you asked for it) |
+Or say "deep audit", "verify everything". Gemini gets full tool access: reads files, runs tests, searches code, checks git history. It independently verifies every claim Claude makes. Thorough (30-120s).
+
+**What the deep auditor can do:**
+- Read any file in the project
+- Run shell commands (tests, builds, linting)
+- Search code with regex
+- Check git log and diff
+- Verify specific claims ("tests pass", "bug is fixed")
+
+### Install the skill
+
+Included in the one-liner install. Or manually:
+
+```bash
+mkdir -p ~/.claude/skills/bouncer/scripts
+cp skill/SKILL.md ~/.claude/skills/bouncer/SKILL.md
+cp skill/scripts/bouncer-check.py ~/.claude/skills/bouncer/scripts/bouncer-check.py
+cp skill/scripts/bouncer-deep.py ~/.claude/skills/bouncer/scripts/bouncer-deep.py
+chmod +x ~/.claude/skills/bouncer/scripts/*.py
+```
+
+### Comparison
+
+| Mode | Speed | Verification | Use case |
+|------|-------|-------------|----------|
+| Hook (auto) | 5-15s | Transcript-based | Every response |
+| Quick (`/bouncer`) | 5-10s | Diff + summary | Spot check |
+| Deep (`/bouncer deep`) | 30-120s | Independent tool access | Before merging, final review |
 | `sys.exit(2)` on block | `sys.exit(0)` always |
 
 ## Running tests
