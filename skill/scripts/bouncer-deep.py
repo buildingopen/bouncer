@@ -94,10 +94,25 @@ def search_code(pattern: str, glob: str = "") -> str:
         return output or "(no matches)"
     except FileNotFoundError:
         # Fallback to grep if rg not available
-        grep_cmd = f"grep -rn '{pattern}' {CWD}"
+        grep_cmd = ["grep", "-rn", pattern, CWD]
         if glob:
-            grep_cmd += f" --include='{glob}'"
-        return run_command(grep_cmd)
+            grep_cmd += ["--include", glob]
+        try:
+            result = subprocess.run(
+                grep_cmd, capture_output=True, text=True, timeout=15
+            )
+            output = result.stdout
+            if result.stderr:
+                output += ("\nSTDERR:\n" if output else "STDERR:\n") + result.stderr
+            if result.returncode == 1 and not result.stderr:
+                return "(no matches)"
+            if result.returncode not in (0, 1):
+                output += f"\nEXIT CODE: {result.returncode}"
+            if len(output) > 20_000:
+                output = output[:20_000] + "\n... (truncated)"
+            return output or "(no matches)"
+        except Exception as e:
+            return f"ERROR: {e}"
     except Exception as e:
         return f"ERROR: {e}"
 

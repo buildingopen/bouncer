@@ -112,6 +112,13 @@ class TestSearchCode:
             result = bd.search_code("nonexistent_pattern_xyz", "*.py")
         assert "no matches" in result.lower() or result.strip() == ""
 
+    def test_grep_fallback_no_matches(self):
+        rg_missing = FileNotFoundError()
+        grep_result = mock.Mock(returncode=1, stdout="", stderr="")
+        with mock.patch("subprocess.run", side_effect=[rg_missing, grep_result]):
+            result = bd.search_code("nonexistent_pattern_xyz", "*.py")
+        assert "no matches" in result.lower()
+
 
 class TestListFiles:
     def test_lists_directory(self, tmp_path):
