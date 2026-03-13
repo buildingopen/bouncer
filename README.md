@@ -18,6 +18,31 @@ User prompt → Claude Code → [Stop Hook] → Gemini 2.5 Flash
                                                 with Gemini's feedback)
 ```
 
+## What it looks like
+
+Quick audit:
+
+```text
+========================================
+  BOUNCER AUDIT: 9/10
+========================================
+
+SCORE: 9/10
+ISSUES:
+- missing explicit test command output in final message
+VERDICT: FAIL
+```
+
+Deep audit:
+
+```text
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    BOUNCER DEEP AUDIT  [###########################...]  9/10
+    GUEST LIST: almost flawless
+    Verified in 12.4s
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
 ## How it works
 
 1. Claude Code triggers the Stop hook when it's about to return a response
@@ -43,10 +68,10 @@ Review Google's data handling policies before use.
 ### Quick install (recommended)
 
 ```bash
-curl -sL github.com/buildingopen/bouncer/raw/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/buildingopen/bouncer/master/install.sh | bash
 ```
 
-This installs the dependency, copies hook + skill files, registers the Stop hook in `settings.json`, and enables bouncer. You just need to set your API key:
+This installs `google-genai` into your Python user site, copies hook + skill files, registers the Stop hook in `settings.json`, and enables bouncer. You just need to set your API key:
 
 ```bash
 export GEMINI_API_KEY="your-gemini-api-key"
@@ -62,7 +87,7 @@ Add this to your `.bashrc`/`.zshrc`. Get a free key at [aistudio.google.com/apik
 #### 1. Install dependency
 
 ```bash
-pip install google-genai
+python3 -m pip install --user --break-system-packages google-genai
 ```
 
 #### 2. Copy files

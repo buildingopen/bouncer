@@ -13,4 +13,29 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt pytest
-      - run: python -m pytest test_gemini_audit.py test_bouncer_check.py -v
+      - run: python -m pytest test_gemini_audit.py test_bouncer_check.py test_bouncer_deep.py -v
+  installer-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run installer in clean HOME
+        run: |
+          export HOME="$(mktemp -d)"
+          bash ./install.sh
+          test -x "$HOME/.claude/hooks/gemini-audit.py"
+          test -x "$HOME/.claude/hooks/gemini-audit.sh"
+          test -x "$HOME/.claude/skills/bouncer/scripts/bouncer-check.py"
+          test -x "$HOME/.claude/skills/bouncer/scripts/bouncer-deep.py"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          settings = json.loads(Path(os.path.expanduser("~/.claude/settings.json")).read_text())
+          hooks = settings["hooks"]["Stop"][0]["hooks"]
+          assert any(h["command"] == "~/.claude/hooks/gemini-audit.sh" for h in hooks)
+          print("installer smoke test passed")
+          PY

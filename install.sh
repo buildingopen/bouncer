@@ -2,7 +2,7 @@
 set -e
 
 # Bouncer installer
-# Usage: curl -sL github.com/buildingopen/bouncer/raw/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/buildingopen/bouncer/master/install.sh | bash
 
 GREEN='\033[0;32m'
 DIM='\033[2m'
@@ -26,23 +26,44 @@ if ! python3 -m pip --version &>/dev/null; then
     exit 1
 fi
 
+# Resolve source files. When the installer is run from a local checkout, copy
+# directly from disk; when piped from curl, download from GitHub.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_DIR="${BOUNCER_SOURCE_DIR:-}"
+REPO_REF="${BOUNCER_REPO_REF:-master}"
+REPO_BASE_URL="${BOUNCER_BASE_URL:-https://raw.githubusercontent.com/buildingopen/bouncer/${REPO_REF}}"
+
+if [ -z "$SOURCE_DIR" ] && [ -f "$SCRIPT_DIR/gemini-audit.py" ] && [ -f "$SCRIPT_DIR/skill/SKILL.md" ]; then
+    SOURCE_DIR="$SCRIPT_DIR"
+fi
+
+copy_or_download() {
+    local relative_path="$1"
+    local destination="$2"
+
+    if [ -n "$SOURCE_DIR" ]; then
+        cp "$SOURCE_DIR/$relative_path" "$destination"
+    else
+        curl -fsSL "$REPO_BASE_URL/$relative_path" -o "$destination"
+    fi
+}
+
 # Install dependency
 echo -e "${DIM}Installing google-genai...${RESET}"
-python3 -m pip install --quiet google-genai
+python3 -m pip install --quiet --user --break-system-packages google-genai
 
 # Create directories
 mkdir -p ~/.claude/hooks
 mkdir -p ~/.claude/skills/bouncer/scripts
 
-# Download files
-REPO="https://raw.githubusercontent.com/buildingopen/bouncer/main"
-echo -e "${DIM}Downloading bouncer...${RESET}"
+# Install files
+echo -e "${DIM}Installing bouncer files...${RESET}"
 
-curl -sL "$REPO/gemini-audit.py"   -o ~/.claude/hooks/gemini-audit.py
-curl -sL "$REPO/gemini-audit.sh"   -o ~/.claude/hooks/gemini-audit.sh
-curl -sL "$REPO/skill/SKILL.md"    -o ~/.claude/skills/bouncer/SKILL.md
-curl -sL "$REPO/skill/scripts/bouncer-check.py" -o ~/.claude/skills/bouncer/scripts/bouncer-check.py
-curl -sL "$REPO/skill/scripts/bouncer-deep.py"  -o ~/.claude/skills/bouncer/scripts/bouncer-deep.py
+copy_or_download "gemini-audit.py" ~/.claude/hooks/gemini-audit.py
+copy_or_download "gemini-audit.sh" ~/.claude/hooks/gemini-audit.sh
+copy_or_download "skill/SKILL.md" ~/.claude/skills/bouncer/SKILL.md
+copy_or_download "skill/scripts/bouncer-check.py" ~/.claude/skills/bouncer/scripts/bouncer-check.py
+copy_or_download "skill/scripts/bouncer-deep.py" ~/.claude/skills/bouncer/scripts/bouncer-deep.py
 
 chmod +x ~/.claude/hooks/gemini-audit.sh ~/.claude/hooks/gemini-audit.py
 chmod +x ~/.claude/skills/bouncer/scripts/bouncer-check.py
