@@ -3,6 +3,21 @@
 Gemini stands at the door. Independent quality gate that audits Claude Code's output before it can stop. Score below threshold? Claude keeps working.
 
 [![Tests](https://github.com/buildingopen/bouncer/actions/workflows/test.yml/badge.svg)](https://github.com/buildingopen/bouncer/actions/workflows/test.yml)
+[![Docs](https://img.shields.io/badge/docs-live-201510?style=flat-square)](https://buildingopen.github.io/bouncer/)
+[![Release](https://img.shields.io/github/v/release/buildingopen/bouncer?display_name=tag&style=flat-square)](https://github.com/buildingopen/bouncer/releases)
+[![License](https://img.shields.io/github/license/buildingopen/bouncer?style=flat-square)](https://github.com/buildingopen/bouncer/blob/master/LICENSE)
+
+![Bouncer hero](docs/assets/bouncer-hero.svg)
+
+## Why it gets shared
+
+- Claude cannot wave through unverified work. Another model checks the evidence.
+- One install gives you both the automatic Stop hook and the on-demand `/bouncer` skill.
+- The repo is explicit about security, data flow, and how to test the installer in a clean environment.
+
+## Live site
+
+https://buildingopen.github.io/bouncer/
 
 ```
 User prompt → Claude Code → [Stop Hook] → Gemini 2.5 Flash
@@ -78,6 +93,14 @@ export GEMINI_API_KEY="your-gemini-api-key"
 ```
 
 Add this to your `.bashrc`/`.zshrc`. Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey). If no key is set, the hook fails open (exits 0, does not block).
+
+### Clean uninstall
+
+```bash
+rm -f ~/.claude/hooks/gemini-audit.py ~/.claude/hooks/gemini-audit.sh
+rm -rf ~/.claude/skills/bouncer
+rm -f ~/.claude/.gemini-audit-enabled
+```
 
 ### Manual install
 
@@ -236,7 +259,7 @@ chmod +x ~/.claude/skills/bouncer/scripts/*.py
 ## Running tests
 
 ```bash
-pip install pytest
+python3 -m pip install --user --break-system-packages -r requirements.txt pytest
 python3 -m pytest test_gemini_audit.py test_bouncer_check.py test_bouncer_deep.py -v
 ```
 
@@ -246,3 +269,11 @@ python3 -m pytest test_gemini_audit.py test_bouncer_check.py test_bouncer_deep.p
 - `google-genai` package (see `requirements.txt`)
 - A Gemini API key (free tier works)
 - Claude Code with hooks support
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local checks and PR expectations.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for data flow and reporting guidance.

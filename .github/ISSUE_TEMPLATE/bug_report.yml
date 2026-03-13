@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a reproducible problem in the hook, skill, installer, or docs
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Stop hook
+        - /bouncer quick audit
+        - /bouncer deep audit
+        - Installer
+        - Docs / README
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened
+      description: Describe the failure and the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Include commands, prompts, and relevant files.
+      placeholder: |
+        1. Install with ...
+        2. Run Claude with ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Paste logs, traceback, or screenshots.
+      render: shell

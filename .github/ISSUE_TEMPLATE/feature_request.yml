@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a new audit capability, integration, or UX improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user workflow or failure mode are you trying to improve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the feature and how it should behave.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: How would you verify that the feature works correctly?
+      placeholder: tests, logs, sample prompts, screenshots

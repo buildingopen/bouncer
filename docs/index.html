@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bouncer</title>
+    <meta
+      name="description"
+      content="Gemini stands at the door. Bouncer audits Claude Code's output before it can stop."
+    />
+    <meta property="og:title" content="Bouncer" />
+    <meta
+      property="og:description"
+      content="Independent Gemini quality gate for Claude Code Stop hooks and on-demand audits."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="./assets/bouncer-hero.svg" />
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap");
+
+      :root {
+        --ink: #201510;
+        --ink-soft: #5b3422;
+        --paper: #fff8eb;
+        --card: rgba(255, 249, 237, 0.74);
+        --line: rgba(96, 44, 19, 0.14);
+        --accent: #e66a34;
+        --accent-deep: #b44318;
+        --warm: #ffd58d;
+        --shadow: 0 30px 70px rgba(74, 25, 7, 0.17);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Space Grotesk", "Avenir Next", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top right, rgba(255, 237, 177, 0.8), transparent 28%),
+          radial-gradient(circle at bottom left, rgba(254, 215, 170, 0.7), transparent 24%),
+          linear-gradient(135deg, #fff4d4 0%, #ffd7a0 44%, #ffb272 74%, #ef7a3f 100%);
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 20px 80px;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 36px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .brand-badge {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 14px;
+        background: rgba(32, 21, 16, 0.92);
+        color: #fff8eb;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 22px;
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      .nav-links a {
+        text-decoration: none;
+        color: var(--ink-soft);
+        font-weight: 500;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 28px;
+        align-items: center;
+        margin-bottom: 34px;
+      }
+
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .hero-copy {
+        border-radius: 30px;
+        padding: 38px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        background: rgba(32, 21, 16, 0.92);
+        color: #fff7ed;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 22px 0 14px;
+        font-size: clamp(48px, 8vw, 84px);
+        line-height: 0.94;
+        letter-spacing: -0.05em;
+      }
+
+      .lede {
+        margin: 0 0 24px;
+        max-width: 58ch;
+        font-size: 20px;
+        line-height: 1.55;
+        color: var(--ink-soft);
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-bottom: 22px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 50px;
+        padding: 0 20px;
+        border-radius: 16px;
+        text-decoration: none;
+        font-weight: 700;
+        border: 1px solid transparent;
+      }
+
+      .button.primary {
+        background: var(--ink);
+        color: #fff8eb;
+      }
+
+      .button.secondary {
+        color: var(--ink);
+        border-color: rgba(32, 21, 16, 0.15);
+        background: rgba(255, 248, 235, 0.75);
+      }
+
+      .hero-points {
+        display: grid;
+        gap: 12px;
+      }
+
+      .hero-points div {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        color: var(--ink-soft);
+      }
+
+      .hero-points strong {
+        color: var(--ink);
+      }
+
+      .hero-art {
+        padding: 16px;
+        border-radius: 30px;
+      }
+
+      .hero-art img {
+        width: 100%;
+        display: block;
+        border-radius: 20px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+        margin-bottom: 18px;
+      }
+
+      .card {
+        border-radius: 24px;
+        padding: 24px;
+      }
+
+      .card h2,
+      .section h2 {
+        margin: 0 0 12px;
+        font-size: 26px;
+      }
+
+      .card p,
+      .section p,
+      .section li {
+        color: var(--ink-soft);
+        line-height: 1.6;
+      }
+
+      .terminal {
+        margin-top: 16px;
+        padding: 18px;
+        border-radius: 18px;
+        background: rgba(17, 17, 20, 0.95);
+        color: #f6f2eb;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 15px;
+        line-height: 1.65;
+        overflow-x: auto;
+      }
+
+      .terminal .dim {
+        color: #fbc98f;
+      }
+
+      .terminal .green {
+        color: #9cf2c4;
+      }
+
+      .terminal .red {
+        color: #ff9c8e;
+      }
+
+      .sections {
+        display: grid;
+        gap: 18px;
+      }
+
+      .section {
+        border-radius: 28px;
+        padding: 28px;
+      }
+
+      .install {
+        display: grid;
+        grid-template-columns: 1fr 0.9fr;
+        gap: 20px;
+      }
+
+      .code-block {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+        padding: 18px;
+        border-radius: 20px;
+        background: rgba(17, 17, 20, 0.94);
+        color: #fff7ed;
+        font-family: "IBM Plex Mono", monospace;
+        margin-bottom: 18px;
+      }
+
+      .code-block code {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .copy {
+        margin-left: auto;
+        min-width: 132px;
+        min-height: 42px;
+        border: 0;
+        border-radius: 14px;
+        background: #fee7c7;
+        color: #7c2d12;
+        font-family: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .mini-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .mini-card {
+        padding: 18px;
+        border-radius: 18px;
+        background: rgba(255, 248, 235, 0.6);
+        border: 1px solid var(--line);
+      }
+
+      .footer {
+        margin-top: 26px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--ink-soft);
+      }
+
+      @media (max-width: 960px) {
+        .hero,
+        .install,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        h1 {
+          max-width: 10ch;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .shell {
+          padding: 18px 14px 60px;
+        }
+
+        .nav {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .hero-copy,
+        .hero-art,
+        .card,
+        .section {
+          padding: 22px;
+          border-radius: 22px;
+        }
+
+        .mini-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .copy {
+          width: 100%;
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="nav">
+        <a class="brand" href="https://github.com/buildingopen/bouncer">
+          <span class="brand-badge">B</span>
+          <span>Bouncer</span>
+        </a>
+        <div class="nav-links">
+          <a href="https://github.com/buildingopen/bouncer">GitHub</a>
+          <a href="#install">Install</a>
+          <a href="#modes">Modes</a>
+          <a href="#trust">Trust</a>
+        </div>
+      </nav>
+
+      <section class="hero">
+        <div class="hero-copy panel">
+          <div class="eyebrow">Gemini quality gate for Claude Code</div>
+          <h1>Make Claude prove it.</h1>
+          <p class="lede">
+            Bouncer intercepts Claude Code right before it stops, sends the
+            actual work context to Gemini, and blocks the response until the
+            output is verified.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/buildingopen/bouncer">Open Repository</a>
+            <a class="button secondary" href="#install">Install in 60 seconds</a>
+          </div>
+          <div class="hero-points">
+            <div><strong>Automatic:</strong> runs as a Stop hook on every Claude response.</div>
+            <div><strong>On-demand:</strong> use <code>/bouncer</code> or <code>/bouncer deep</code> for spot checks and final reviews.</div>
+            <div><strong>Safe by default:</strong> fails open on API errors, logs decisions, and handles concurrent invocations.</div>
+          </div>
+        </div>
+        <div class="hero-art panel">
+          <img src="./assets/bouncer-hero.svg" alt="Bouncer visual showing blocked and approved audit outcomes" />
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card panel">
+          <h2>Hook</h2>
+          <p>
+            Claude tries to stop. Bouncer reads the transcript, tool output,
+            git diff, <code>CLAUDE.md</code>, and active workplan, then asks
+            Gemini to score the result from 1 to 10.
+          </p>
+        </article>
+        <article class="card panel" id="modes">
+          <h2>Quick + Deep</h2>
+          <p>
+            Use the automatic Stop hook every time, or call
+            <code>/bouncer</code> for a fast audit and
+            <code>/bouncer deep</code> when you want an independent tool-using
+            reviewer.
+          </p>
+        </article>
+        <article class="card panel" id="trust">
+          <h2>Trust Signals</h2>
+          <p>
+            MIT licensed, tested in CI, clean-home installer smoke tested, and
+            explicit about which data gets sent to the Gemini API.
+          </p>
+        </article>
+      </section>
+
+      <section class="sections">
+        <article class="section panel">
+          <h2>What the block looks like</h2>
+          <div class="terminal">
+            <span class="dim">$ claude "finish the fix and verify it"</span><br />
+            <span class="red">========================================</span><br />
+            <span class="red">  BOUNCER AUDIT: 8/10</span><br />
+            <span class="red">========================================</span><br /><br />
+            SCORE: 8/10<br />
+            ISSUES:<br />
+            - claimed tests ran, but no command output was present<br />
+            - fix path on empty transcript was not verified<br />
+            VERDICT: FAIL<br /><br />
+            <span class="green">Claude keeps working until Gemini approves.</span>
+          </div>
+        </article>
+
+        <article class="section panel install" id="install">
+          <div>
+            <h2>Install</h2>
+            <p>
+              Copy one command, set your API key, and Bouncer will register the
+              Stop hook plus the on-demand skill.
+            </p>
+            <div class="code-block">
+              <code id="install-command">curl -fsSL https://raw.githubusercontent.com/buildingopen/bouncer/master/install.sh | bash</code>
+              <button class="copy" data-copy="#install-command">Copy command</button>
+            </div>
+            <div class="code-block">
+              <code id="api-command">export GEMINI_API_KEY="your-gemini-api-key"</code>
+              <button class="copy" data-copy="#api-command">Copy export</button>
+            </div>
+          </div>
+          <div class="mini-grid">
+            <div class="mini-card">
+              <strong>Automatic</strong>
+              <p>Runs on every Stop hook invocation and blocks low-confidence output.</p>
+            </div>
+            <div class="mini-card">
+              <strong>/bouncer</strong>
+              <p>Fast audit using the diff, Claude summary, and project rules.</p>
+            </div>
+            <div class="mini-card">
+              <strong>/bouncer deep</strong>
+              <p>Gemini reads files, runs commands, checks git history, and verifies claims.</p>
+            </div>
+            <div class="mini-card">
+              <strong>Fails open</strong>
+              <p>No API key or API outage means Claude is not permanently blocked.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="section panel">
+          <h2>What gets sent to Gemini</h2>
+          <p>
+            Bouncer is explicit about the audit payload. It can send Claude's
+            assistant response, recent user messages from the transcript, tool
+            call output, git diff, project <code>CLAUDE.md</code>, and the
+            active workplan. Review Google's data handling policies before using
+            it on sensitive projects.
+          </p>
+        </article>
+      </section>
+
+      <footer class="footer">
+        <div>Built by <a href="https://github.com/buildingopen">Building Open</a> · MIT licensed</div>
+        <div>
+          <a href="https://github.com/buildingopen/bouncer/releases">Releases</a>
+          ·
+          <a href="https://github.com/buildingopen/bouncer/issues">Issues</a>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      for (const button of document.querySelectorAll(".copy")) {
+        button.addEventListener("click", async () => {
+          const target = document.querySelector(button.dataset.copy);
+          if (!target) {
+            return;
+          }
+          try {
+            await navigator.clipboard.writeText(target.textContent.trim());
+            const original = button.textContent;
+            button.textContent = "Copied";
+            setTimeout(() => {
+              button.textContent = original;
+            }, 1200);
+          } catch (err) {
+            button.textContent = "Copy failed";
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
