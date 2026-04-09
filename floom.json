@@ -58,7 +58,7 @@
         {
           "name": "passed",
           "label": "Passed",
-          "type": "boolean"
+          "type": "text"
         },
         {
           "name": "issues",
